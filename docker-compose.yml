@@ -1,0 +1,5 @@
+# Root-level convenience wrapper — delegates to infra/local/docker-compose.yml
+# Usage: docker compose up -d
+
+include:
+  - infra/local/docker-compose.yml

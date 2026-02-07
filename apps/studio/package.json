@@ -1,0 +1,35 @@
+{
+  "name": "@crm-ai/studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "nuxt typecheck",
+    "clean": "rm -rf .nuxt .output dist"
+  },
+  "dependencies": {
+    "@crm-ai/shared": "workspace:*",
+    "@crm-ai/orchestrator": "workspace:*",
+    "@crm-ai/connectors": "workspace:*",
+    "@crm-ai/policies": "workspace:*",
+    "nuxt": "^3.15.4",
+    "vue": "^3.5.13",
+    "pg": "^8.13.1",
+    "zod": "^3.24.1",
+    "nanoid": "^5.0.9"
+  },
+  "devDependencies": {
+    "@nuxt/devtools": "^2.1.0",
+    "@types/pg": "^8.11.11",
+    "@playwright/test": "^1.50.1",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5",
+    "tailwindcss": "^4.0.6",
+    "@tailwindcss/vite": "^4.0.6"
+  }
+}

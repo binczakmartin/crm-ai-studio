@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "isolatedModules": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@crm-ai/shared": ["./packages/shared/src/index.ts"],
+      "@crm-ai/shared/*": ["./packages/shared/src/*"],
+      "@crm-ai/orchestrator": ["./packages/orchestrator/src/index.ts"],
+      "@crm-ai/orchestrator/*": ["./packages/orchestrator/src/*"],
+      "@crm-ai/connectors": ["./packages/connectors/src/index.ts"],
+      "@crm-ai/connectors/*": ["./packages/connectors/src/*"],
+      "@crm-ai/policies": ["./packages/policies/src/index.ts"],
+      "@crm-ai/policies/*": ["./packages/policies/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist", ".output", ".nuxt"]
+}
