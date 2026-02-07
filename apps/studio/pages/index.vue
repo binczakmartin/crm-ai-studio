@@ -25,7 +25,7 @@
 
     <EvidenceDrawer
       :open="drawerOpen"
-      :evidence="chat.evidence.value"
+      :evidence="displayedEvidence"
       :citations="currentCitations"
       @close="drawerOpen = false"
     />
@@ -90,8 +90,20 @@ const displayMessages = computed(() => {
   return msgs;
 });
 
+/** Evidence state per message — caches loaded evidence to avoid re-fetching. */
+const evidenceCache = ref<Map<string, typeof chat.evidence.value>>(new Map());
+
+/** The evidence currently displayed in the drawer (for the selected message). */
+const displayedEvidence = computed(() => {
+  if (selectedMessageId.value && evidenceCache.value.has(selectedMessageId.value)) {
+    return evidenceCache.value.get(selectedMessageId.value)!;
+  }
+  return chat.evidence.value;
+});
+
+/** Citations for the currently displayed evidence. */
 const currentCitations = computed(() => {
-  return chat.evidence.value.answer?.citations as DisplayMessage['citations'] ?? [];
+  return displayedEvidence.value.answer?.citations as DisplayMessage['citations'] ?? [];
 });
 
 async function handleSend(content: string) {
@@ -121,30 +133,137 @@ async function handleSend(content: string) {
   // Reload messages from server if we have a thread
   if (chat.threadId.value) {
     await loadMessages(chat.threadId.value);
+
+    // Cache the live streaming evidence for the latest assistant message
+    const lastAssistant = [...messages.value].reverse().find((m) => m.role === 'assistant');
+    if (lastAssistant && chat.evidence.value.toolCalls.length > 0) {
+      evidenceCache.value.set(lastAssistant.id, { ...chat.evidence.value });
+      selectedMessageId.value = lastAssistant.id;
+    }
   }
 }
 
 async function loadMessages(threadId: string) {
   try {
     const result = await api.fetchMessages(threadId);
-    messages.value = result.messages.map((m) => ({
-      id: m.id,
-      role: m.role as 'user' | 'assistant' | 'system',
-      content: m.content,
-      citations: (m.citations as DisplayMessage['citations']) ?? [],
-      createdAt: m.createdAt,
-    }));
+    messages.value = result.messages
+      .filter((m) => m.role !== 'system') // Hide system messages (verification reports)
+      .map((m) => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant' | 'system',
+        content: m.content,
+        citations: (m.citations as DisplayMessage['citations']) ?? [],
+        createdAt: m.createdAt,
+      }));
+
+    // Restore evidence for the last assistant message
+    await loadEvidenceForLastMessage();
   } catch {
     // Non-blocking
   }
 }
 
-function toggleEvidence(messageId: string) {
-  if (selectedMessageId.value === messageId) {
-    drawerOpen.value = !drawerOpen.value;
-  } else {
-    selectedMessageId.value = messageId;
-    drawerOpen.value = true;
+/**
+ * Load evidence (tool calls + verification) from the DB for the last user message.
+ * Caches the result per assistant message for the Evidence drawer.
+ */
+async function loadEvidenceForLastMessage() {
+  // Find the last user message (tool_calls are linked to the user message_id)
+  const lastUserMsg = [...messages.value].reverse().find((m) => m.role === 'user');
+  if (!lastUserMsg) return;
+
+  try {
+    const evidenceData = await api.fetchEvidence(lastUserMsg.id);
+    if (evidenceData.toolCalls.length > 0) {
+      const lastAssistant = [...messages.value].reverse().find((m) => m.role === 'assistant');
+      const evidence = {
+        toolCalls: evidenceData.toolCalls.map((tc) => ({
+          tool: tc.tool,
+          args: tc.args,
+          status: tc.status,
+          durationMs: tc.durationMs ?? undefined,
+          rowCount: tc.rowCount ?? undefined,
+          error: tc.error ?? undefined,
+        })),
+        verification: evidenceData.verification ?? undefined,
+        answer: lastAssistant
+          ? { content: lastAssistant.content, citations: lastAssistant.citations }
+          : undefined,
+      };
+      // Set as the global evidence (for latest message display)
+      chat.evidence.value = evidence;
+      // Also cache for per-message access
+      if (lastAssistant) {
+        evidenceCache.value.set(lastAssistant.id, evidence);
+        selectedMessageId.value = lastAssistant.id;
+      }
+    }
+  } catch {
+    // Non-blocking — evidence drawer will just be empty
+  }
+}
+
+/**
+ * Toggle the evidence drawer for a specific assistant message.
+ * Loads evidence from the DB for the corresponding user message if not cached.
+ */
+async function toggleEvidence(messageId: string) {
+  if (selectedMessageId.value === messageId && drawerOpen.value) {
+    drawerOpen.value = false;
+    return;
+  }
+
+  selectedMessageId.value = messageId;
+  drawerOpen.value = true;
+
+  // If already cached, nothing more to do
+  if (evidenceCache.value.has(messageId)) return;
+
+  // Find the user message that precedes this assistant message
+  // (tool_calls are linked to the user message_id in the DB)
+  const msgIndex = messages.value.findIndex((m) => m.id === messageId);
+  let userMsgId: string | null = null;
+  if (msgIndex >= 0) {
+    // Walk backwards from the clicked message to find the preceding user message
+    for (let i = msgIndex - 1; i >= 0; i--) {
+      if (messages.value[i]!.role === 'user') {
+        userMsgId = messages.value[i]!.id;
+        break;
+      }
+    }
+    // If the clicked message IS a user message, use it directly
+    if (messages.value[msgIndex]!.role === 'user') {
+      userMsgId = messageId;
+    }
+  }
+
+  if (!userMsgId) return;
+
+  try {
+    const evidenceData = await api.fetchEvidence(userMsgId);
+    if (evidenceData.toolCalls.length > 0) {
+      // Find the assistant message right after this user message
+      const assistantMsg = messages.value.find(
+        (m, i) => m.role === 'assistant' && i > messages.value.findIndex((u) => u.id === userMsgId),
+      );
+      const evidence = {
+        toolCalls: evidenceData.toolCalls.map((tc) => ({
+          tool: tc.tool,
+          args: tc.args,
+          status: tc.status,
+          durationMs: tc.durationMs ?? undefined,
+          rowCount: tc.rowCount ?? undefined,
+          error: tc.error ?? undefined,
+        })),
+        verification: evidenceData.verification ?? undefined,
+        answer: assistantMsg
+          ? { content: assistantMsg.content, citations: assistantMsg.citations }
+          : undefined,
+      };
+      evidenceCache.value.set(messageId, evidence);
+    }
+  } catch {
+    // Non-blocking
   }
 }
 
@@ -165,6 +284,7 @@ watch(
     chat.reset();
     drawerOpen.value = false;
     selectedMessageId.value = null;
+    evidenceCache.value.clear();
 
     if (newId) {
       // Load existing thread

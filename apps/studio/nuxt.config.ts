@@ -24,6 +24,7 @@ export default defineNuxtConfig({
     ragTopK: parseInt(process.env.RAG_TOP_K || '8', 10),
     toolTimeoutMs: parseInt(process.env.TOOL_TIMEOUT_MS || '30000', 10),
     plannerTemperature: parseFloat(process.env.PLANNER_TEMPERATURE || '0.1'),
+    maxChatHistory: parseInt(process.env.MAX_CHAT_HISTORY || '20', 10),
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api',
     },

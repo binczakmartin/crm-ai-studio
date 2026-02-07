@@ -15,10 +15,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'workspace_id is required' });
   }
 
+  const limit = config.maxChatHistory ?? 20;
   const result = await query(
     config.databaseUrl,
-    'SELECT id, workspace_id, title, created_at, updated_at FROM threads WHERE workspace_id = $1 ORDER BY updated_at DESC LIMIT 50',
-    [workspace_id],
+    'SELECT id, workspace_id, title, created_at, updated_at FROM threads WHERE workspace_id = $1 ORDER BY updated_at DESC LIMIT $2',
+    [workspace_id, limit],
   );
 
   return {

@@ -82,6 +82,9 @@ export default defineEventHandler(async (event) => {
       // Send thread info
       send('meta', { threadId, messageId });
 
+      // Track pending tool_call_start args to attach when persisting on tool_call_end
+      const pendingToolArgs: Array<Record<string, unknown>> = [];
+
       try {
         const context = {
           workspaceId,
@@ -94,9 +97,16 @@ export default defineEventHandler(async (event) => {
         for await (const sseEvent of pipeline.stream(context)) {
           send(sseEvent.event, sseEvent.data);
 
-          // Persist tool calls and results as they come
+          // Capture args from tool_call_start (they are not present in tool_call_end)
+          if (sseEvent.event === 'tool_call_start') {
+            const startData = sseEvent.data as Record<string, unknown>;
+            pendingToolArgs.push((startData.args as Record<string, unknown>) ?? {});
+          }
+
+          // Persist tool calls with the correct args from tool_call_start
           if (sseEvent.event === 'tool_call_end') {
             const toolData = sseEvent.data as Record<string, unknown>;
+            const args = pendingToolArgs.shift() ?? {};
             try {
               await query(
                 config.databaseUrl,
@@ -107,11 +117,25 @@ export default defineEventHandler(async (event) => {
                   workspaceId,
                   messageId,
                   toolData.tool,
-                  JSON.stringify(toolData.args ?? {}),
+                  JSON.stringify(args),
                   toolData.status,
                   toolData.durationMs ?? null,
                   toolData.error ?? null,
                 ],
+              );
+            } catch {
+              // Best effort persistence
+            }
+          }
+
+          // Persist verification report as message metadata
+          if (sseEvent.event === 'verification') {
+            try {
+              await query(
+                config.databaseUrl,
+                `INSERT INTO messages (thread_id, workspace_id, role, content, metadata)
+                 VALUES ($1, $2, 'system', 'verification', $3)`,
+                [threadId, workspaceId, JSON.stringify(sseEvent.data)],
               );
             } catch {
               // Best effort persistence

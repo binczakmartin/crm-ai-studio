@@ -12,6 +12,17 @@ interface ApiThreadsResponse { threads: Thread[] }
 interface ApiMessagesResponse { messages: Message[] }
 interface ApiToolCallsResponse { toolCalls: ToolCall[] }
 interface ApiWorkspacesResponse { workspaces: Array<{ id: string; name: string }> }
+interface ApiEvidenceResponse {
+  toolCalls: Array<{
+    tool: string;
+    args: Record<string, unknown>;
+    status: string;
+    durationMs: number | null;
+    rowCount: number | null;
+    error: string | null;
+  }>;
+  verification: Record<string, unknown> | null;
+}
 
 /**
  * Composable for typed API calls to the Studio backend.
@@ -65,6 +76,11 @@ export function useApiClient() {
     });
   }
 
+  /** Fetch evidence (tool calls + verification) for a specific user message. */
+  async function fetchEvidence(messageId: string): Promise<ApiEvidenceResponse> {
+    return $fetch('/api/evidence', { query: { message_id: messageId } });
+  }
+
   return {
     fetchWorkspaces,
     fetchSources,
@@ -73,5 +89,6 @@ export function useApiClient() {
     fetchThreads,
     fetchMessages,
     fetchToolCalls,
+    fetchEvidence,
   };
 }

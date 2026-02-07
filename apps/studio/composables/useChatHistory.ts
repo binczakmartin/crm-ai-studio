@@ -14,25 +14,35 @@ export interface ChatThread {
 }
 
 const DEMO_WORKSPACE_ID = '00000000-0000-0000-0000-000000000001';
-const MAX_HISTORY = 30;
 
 /**
  * Composable managing thread history + active thread selection.
  * Uses Nuxt useState so state is shared across components.
+ * MAX_CHAT_HISTORY is read from the server runtime config (env var MAX_CHAT_HISTORY).
  */
 export function useChatHistory() {
   const threads = useState<ChatThread[]>('chat-threads', () => []);
   const activeThreadId = useState<string | null>('active-thread-id', () => null);
   const loading = useState<boolean>('chat-history-loading', () => false);
+  const maxHistory = useState<number>('max-chat-history', () => 20);
 
   const api = useApiClient();
 
-  /** Load threads from the server. */
+  /** Load threads from the server. Also fetches the max history config. */
   async function loadThreads() {
     loading.value = true;
     try {
+      // Fetch max chat history from server config
+      try {
+        const configData = await $fetch<{ maxChatHistory: number }>('/api/config');
+        if (configData?.maxChatHistory) {
+          maxHistory.value = configData.maxChatHistory;
+        }
+      } catch {
+        // Use default
+      }
       const result = await api.fetchThreads(DEMO_WORKSPACE_ID);
-      threads.value = result.threads.slice(0, MAX_HISTORY).map((t) => ({
+      threads.value = result.threads.slice(0, maxHistory.value).map((t) => ({
         id: t.id,
         title: t.title || 'New chat',
         createdAt: t.createdAt,
@@ -61,9 +71,9 @@ export function useChatHistory() {
     threads.value = threads.value.filter((t) => t.id !== thread.id);
     // Add to the top
     threads.value.unshift(thread);
-    // Trim to MAX_HISTORY
-    if (threads.value.length > MAX_HISTORY) {
-      threads.value = threads.value.slice(0, MAX_HISTORY);
+    // Trim to maxHistory
+    if (threads.value.length > maxHistory.value) {
+      threads.value = threads.value.slice(0, maxHistory.value);
     }
     activeThreadId.value = thread.id;
   }
